@@ -1,0 +1,222 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
+#include <algorithm> 
+#include <sstream>
+
+using namespace std;
+
+// Funkcja aktywacji (sigmoid)
+double nonlin(double x, bool deriv = false) {
+    if (deriv) {
+        return x * (1 - x);
+    }
+    return 1 / (1 + exp(-x));
+}
+
+// Funkcja do inicjalizacji wag
+vector<vector<double>> initialize_weights(int input_size, int output_size) {
+    vector<vector<double>> weights(input_size, vector<double>(output_size));
+    for (int i = 0; i < input_size; ++i) {
+        for (int j = 0; j < output_size; ++j) {
+            weights[i][j] = 2 * ((double) rand() / RAND_MAX) - 1;
+        }
+    }
+    return weights;
+}
+
+// Funkcja do przekształcania warstw
+vector<double> dot_product(const vector<double>& a, const vector<vector<double>>& b) {
+    vector<double> result(b[0].size(), 0.0);
+    for (size_t i = 0; i < b[0].size(); ++i) {
+        for (size_t j = 0; j < a.size(); ++j) {
+            result[i] += a[j] * b[j][i];
+        }
+    }
+    return result;
+}
+
+int main() {
+    srand(static_cast<unsigned int>(time(0)));
+
+    // Wybór liczby wejść i wyjść
+    int num_inputs, num_outputs;
+    cout << "Wipisz inputy: ";
+    cin >> num_inputs;
+    cout << "Wipisz outputy: ";
+    cin >> num_outputs;
+
+    // Wybór liczby warstw ukrytych i ich rozmiarów
+    int num_hidden_layers;
+    cout << "Ile ukrytych warstw?: ";
+    cin >> num_hidden_layers;
+    vector<int> hidden_layer_sizes(num_hidden_layers);
+    for (int i = 0; i < num_hidden_layers; ++i) {
+        cout << "Wielkość ukrytej warstwy " << i + 1 << ": ";
+        cin >> hidden_layer_sizes[i];
+    }
+
+    // Wybór liczby przykładów danych
+    int num_examples;
+    cout << "Ilość danych treningowych: ";
+    cin >> num_examples;
+
+  int time_lerning;
+  cout << "Podaj czas w milisekundach(np:990000): ";
+  cin >> time_lerning;
+
+    // Definicja danych wejściowych (X) i wyjściowych (y)
+    vector<vector<double>> X(num_examples, vector<double>(num_inputs));
+    vector<vector<double>> y(num_examples, vector<double>(num_outputs));
+    cout << "wpisz dane inpótow treningowych:" << endl;
+    for (int i = 0; i < num_examples; ++i) {
+        for (int j = 0; j < num_inputs; ++j) {
+            cin >> X[i][j];
+        }
+    }
+    cout << "wpisz dane outpótów treningowych:" << endl;
+    for (int i = 0; i < num_examples; ++i) {
+        for (int j = 0; j < num_outputs; ++j) {
+            cin >> y[i][j];
+        }
+    }
+
+    // Inicjalizacja wag
+    vector<vector<vector<double>>> weights;
+    vector<int> layer_sizes = {num_inputs};
+    layer_sizes.insert(layer_sizes.end(), hidden_layer_sizes.begin(), hidden_layer_sizes.end());
+    layer_sizes.push_back(num_outputs);
+    for (size_t i = 0; i < layer_sizes.size() - 1; ++i) {
+        weights.push_back(initialize_weights(layer_sizes[i], layer_sizes[i + 1]));
+    }
+
+    // Trening sieci
+    vector<vector<vector<double>>> layers;
+    for (int j = 0; j < time_lerning; ++j) {
+        layers = {X};
+        for (size_t i = 0; i < weights.size(); ++i) {
+            vector<vector<double>> layer(num_examples, vector<double>(weights[i][0].size()));
+            for (int k = 0; k < num_examples; ++k) {
+                layer[k] = dot_product(layers.back()[k], weights[i]);
+                for (double &value : layer[k]) {
+                    value = nonlin(value);
+                }
+            }
+            layers.push_back(layer);
+        }
+
+        vector<vector<double>> l2_error(num_examples, vector<double>(num_outputs));
+        for (int k = 0; k < num_examples; ++k) {
+            for (int m = 0; m < num_outputs; ++m) {
+                l2_error[k][m] = y[k][m] - layers.back()[k][m];
+            }
+        }
+        if (j % 10000 == 0) {
+            double error_sum = 0;
+            for (const auto& error : l2_error) {
+                for (double value : error) {
+                    error_sum += abs(value);
+                }
+            }
+            cout << "Error at iteration " << j << ": " << error_sum / (num_examples * num_outputs) << endl;
+        }
+
+        vector<vector<vector<double>>> deltas = {l2_error};
+        for (int k = 0; k < num_examples; ++k) {
+            for (double &value : deltas.back()[k]) {
+                value *= nonlin(layers.back()[k][0], true);
+            }
+        }
+
+        for (int i = weights.size() - 1; i > 0; --i) {
+            vector<vector<double>> delta(num_examples, vector<double>(weights[i - 1][0].size()));
+            for (int k = 0; k < num_examples; ++k) {
+                for (size_t m = 0; m < weights[i - 1][0].size(); ++m) {
+                    double sum = 0;
+                    for (size_t n = 0; n < weights[i].size(); ++n) {
+                        sum += deltas.back()[k][n] * weights[i][m][n];
+                    }
+                    delta[k][m] = sum * nonlin(layers[i][k][m], true);
+                }
+            }
+            deltas.push_back(delta);
+        }
+        reverse(deltas.begin(), deltas.end());
+
+        for (size_t i = 0; i < weights.size(); ++i) {
+            for (int k = 0; k < num_examples; ++k) {
+                for (size_t m = 0; m < weights[i].size(); ++m) {
+                    for (size_t n = 0; n < weights[i][m].size(); ++n) {
+                        weights[i][m][n] += layers[i][k][m] * deltas[i][k][n];
+                    }
+                }
+            }
+        }
+    }
+
+    cout << "Wakgi po treningu:" << endl;
+    for (size_t i = 0; i < weights.size(); ++i) {
+        cout << "Weights for layer " << i << " to " << i + 1 << ":" << endl;
+        for (const auto& row : weights[i]) {
+            for (double value : row) {
+                cout << value << " ";
+            }
+            cout << endl;
+        }
+    }
+
+    cout << "Predicted output for training data:" << endl;
+    for (const auto& output : layers.back()) {
+        for (double value : output) {
+            cout << value << " ";
+        }
+        cout << endl;
+    }
+
+    // Wprowadzanie customowych danych
+    cin.ignore(); // To ignore the leftover newline character from previous input
+    while (true) {
+        cout << "Wpisz customowe dane(Lub napisz 'exit'): ";
+        string custom_input;
+        getline(cin, custom_input);
+        if (custom_input == "exit") {
+            break;
+        }
+
+        vector<double> custom_data;
+        stringstream ss(custom_input);
+        string token;
+        while (getline(ss, token, ' ')) {
+            try {
+                custom_data.push_back(stod(token));
+            } catch (const invalid_argument& e) {
+                cerr << "Nieprawidłowe dane wejściowe. Proszę wprowadzić wyłącznie wartości liczbowe." << endl;
+                custom_data.clear();
+                break;
+            }
+        }
+
+        if (custom_data.size() != num_inputs) {
+            cerr << "Nieprawidłowy rozmiar danych wejściowych. Oczekiwano " << num_inputs << " Wartość." << endl;
+            continue;
+        }
+
+        vector<vector<double>> custom_layers = {custom_data};
+        for (const auto& weight : weights) {
+            custom_layers.push_back(dot_product(custom_layers.back(), weight));
+            for (double &value : custom_layers.back()) {
+                value = nonlin(value);
+            }
+        }
+
+        cout << "Przewidywany wynik dla niestandardowych danych wejściowych:" << endl;
+        for (double value : custom_layers.back()) {
+            cout << value << " ";
+        }
+        cout << endl;
+    }
+
+    return 0;
+}
